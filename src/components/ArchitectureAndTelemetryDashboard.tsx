@@ -16,17 +16,29 @@ import {
   AlertTriangle,
   Server,
   Zap,
-  Gauge
+  Gauge,
+  Box,
+  Settings,
+  Save,
+  RotateCcw,
+  Sliders
 } from 'lucide-react';
 import { RunnerTelemetryEngine } from '../core/runnerTelemetry';
 import { CapacityEngine } from '../core/capacityEngine';
-import { Box } from 'lucide-react';
+import { BootstrapConfigEngine, BootstrapEnvConfig } from '../core/bootstrapConfig';
 
 export const ArchitectureAndTelemetryDashboard: React.FC = () => {
-  const [activeSection, setActiveSection] = useState<'resources' | 'grafana' | 'repoAndCi' | 'patterns' | 'capacity'>('resources');
+  const [activeSection, setActiveSection] = useState<'resources' | 'grafana' | 'repoAndCi' | 'patterns' | 'capacity' | 'bootstrap'>('resources');
   const [copiedRules, setCopiedRules] = useState<boolean>(false);
   const [copiedClone, setCopiedClone] = useState<boolean>(false);
   const [copiedNpm, setCopiedNpm] = useState<boolean>(false);
+  const [copiedEnv, setCopiedEnv] = useState<boolean>(false);
+
+  // Bootstrap environment preferences persisted in localStorage
+  const [bootstrapConfig, setBootstrapConfig] = useState<BootstrapEnvConfig>(() =>
+    BootstrapConfigEngine.getStoredConfig()
+  );
+  const [savedToast, setSavedToast] = useState<string | null>(null);
 
   const resourceProfiles = RunnerTelemetryEngine.getRunnerResourceProfiles();
   const alertRulesYaml = RunnerTelemetryEngine.generatePrometheusAlertRules();
@@ -38,6 +50,30 @@ export const ArchitectureAndTelemetryDashboard: React.FC = () => {
   const ghCapacity = CapacityEngine.calculateModelCapacity('github-ci');
   const gaisCapacity = CapacityEngine.calculateModelCapacity('gais-sandbox');
   const bendSpec = CapacityEngine.getBendHvmSpec();
+
+  const handleSaveBootstrapConfig = () => {
+    const res = BootstrapConfigEngine.saveConfig(bootstrapConfig);
+    if (res.success) {
+      setSavedToast('Preferências de bootstrap salvas no localStorage com sucesso!');
+    } else {
+      setSavedToast('Erro ao salvar no localStorage.');
+    }
+    setTimeout(() => setSavedToast(null), 3000);
+  };
+
+  const handleResetBootstrapDefaults = () => {
+    const defaults = BootstrapConfigEngine.resetToDefaults();
+    setBootstrapConfig(defaults);
+    setSavedToast('Configurações de bootstrap restauradas para o padrão!');
+    setTimeout(() => setSavedToast(null), 3000);
+  };
+
+  const handleCopyEnvFile = () => {
+    const envStr = BootstrapConfigEngine.formatAsEnvString(bootstrapConfig);
+    navigator.clipboard.writeText(envStr);
+    setCopiedEnv(true);
+    setTimeout(() => setCopiedEnv(false), 2000);
+  };
 
   const handleCopyAlertRules = () => {
     navigator.clipboard.writeText(alertRulesYaml);
@@ -136,6 +172,18 @@ export const ArchitectureAndTelemetryDashboard: React.FC = () => {
           >
             <Box className="w-3.5 h-3.5" />
             <span>5. Bend / HVM &amp; Capacidade (CI vs GAIS)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSection('bootstrap')}
+            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer ${
+              activeSection === 'bootstrap'
+                ? 'bg-blue-600 text-white font-bold'
+                : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+            }`}
+          >
+            <Settings className="w-3.5 h-3.5" />
+            <span>6. Bootstrap &amp; Auto-Configuração</span>
           </button>
         </div>
       </div>
@@ -598,6 +646,288 @@ npm install -g vortex-livebench
 vortex-livebench --help
               </pre>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* SECTION 6: Bootstrap Environment Variables & Auto-Configuration */}
+      {activeSection === 'bootstrap' && (
+        <div className="space-y-6">
+          {/* Toast alert */}
+          {savedToast && (
+            <div className="p-3 rounded-xl bg-emerald-950 border border-emerald-800 text-emerald-300 text-xs font-mono flex items-center justify-between shadow-lg">
+              <span className="flex items-center gap-2">
+                <Check className="w-4 h-4 text-emerald-400" />
+                {savedToast}
+              </span>
+              <span className="text-[10px] text-emerald-500 font-bold">Chave: vuc_bootstrap_env_config</span>
+            </div>
+          )}
+
+          {/* Form Controls */}
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-5 shadow-xl space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-800 gap-2">
+              <div>
+                <h3 className="font-bold text-white text-sm font-mono flex items-center gap-2">
+                  <Sliders className="w-4 h-4 text-blue-400" />
+                  Painel de Auto-Configuração do Bootstrap do Runner
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5 font-sans">
+                  Defina as variáveis de ambiente necessárias para a auto-configuração do runner e sincronize com o localStorage do navegador.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 font-mono text-xs">
+                <button
+                  onClick={handleSaveBootstrapConfig}
+                  className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-md"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>Salvar no LocalStorage</span>
+                </button>
+
+                <button
+                  onClick={handleResetBootstrapDefaults}
+                  className="px-2.5 py-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800 flex items-center gap-1.5 transition-colors cursor-pointer text-xs"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Restaurar Padrões</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-mono text-xs">
+              {/* RUNNER_ARCH_MODE */}
+              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
+                <label className="text-slate-300 font-bold block flex items-center justify-between">
+                  <span>RUNNER_ARCH_MODE</span>
+                  <span className="text-[10px] text-cyan-400 font-normal">Arquitetura da CPU</span>
+                </label>
+                <select
+                  value={bootstrapConfig.RUNNER_ARCH_MODE}
+                  onChange={(e) =>
+                    setBootstrapConfig({
+                      ...bootstrapConfig,
+                      RUNNER_ARCH_MODE: e.target.value as 'x86_64_avx2' | 'arm64_neon' | 'cuda_sm80',
+                    })
+                  }
+                  className="w-full p-2 bg-slate-900 border border-slate-700 rounded-lg text-white font-mono text-xs focus:outline-none focus:border-blue-500"
+                >
+                  <option value="x86_64_avx2">x86_64_avx2 (Padrão GitHub CI Runner / Intel &amp; AMD AVX2+FMA)</option>
+                  <option value="arm64_neon">arm64_neon (Apple Silicon / AWS Graviton NEON)</option>
+                  <option value="cuda_sm80">cuda_sm80 (NVIDIA Ampere / Hopper GPU SM80+)</option>
+                </select>
+                <p className="text-[11px] text-slate-500 font-sans">
+                  Define o conjunto de instruções SIMD para o cálculo vetorial de baixa latência.
+                </p>
+              </div>
+
+              {/* GPU_ACCELERATION_ENABLED */}
+              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
+                <label className="text-slate-300 font-bold block flex items-center justify-between">
+                  <span>GPU_ACCELERATION_ENABLED</span>
+                  <span
+                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                      bootstrapConfig.GPU_ACCELERATION_ENABLED
+                        ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                        : 'bg-slate-900 text-slate-400 border border-slate-800'
+                    }`}
+                  >
+                    {bootstrapConfig.GPU_ACCELERATION_ENABLED ? 'ATIVADA' : 'DESATIVADA'}
+                  </span>
+                </label>
+                <div className="flex items-center gap-3 pt-1">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setBootstrapConfig({
+                        ...bootstrapConfig,
+                        GPU_ACCELERATION_ENABLED: !bootstrapConfig.GPU_ACCELERATION_ENABLED,
+                      })
+                    }
+                    className={`px-3 py-1.5 rounded-lg border text-xs font-mono font-bold transition-colors cursor-pointer ${
+                      bootstrapConfig.GPU_ACCELERATION_ENABLED
+                        ? 'bg-emerald-950 text-emerald-300 border-emerald-700'
+                        : 'bg-slate-900 text-slate-400 border-slate-700'
+                    }`}
+                  >
+                    {bootstrapConfig.GPU_ACCELERATION_ENABLED ? '✓ Aceleração GPU Habilitada' : '✗ Aceleração CPU Pura (Safe CI)'}
+                  </button>
+                  <span className="text-[11px] text-slate-400 font-sans">
+                    No runner padrão do GitHub Actions (CPU), mantenha desativada.
+                  </span>
+                </div>
+              </div>
+
+              {/* VUC_RUNTIME_ENGINE */}
+              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
+                <label className="text-slate-300 font-bold block flex items-center justify-between">
+                  <span>VUC_RUNTIME_ENGINE</span>
+                  <span className="text-[10px] text-amber-400 font-normal">Motor de Inferência</span>
+                </label>
+                <select
+                  value={bootstrapConfig.VUC_RUNTIME_ENGINE}
+                  onChange={(e) =>
+                    setBootstrapConfig({
+                      ...bootstrapConfig,
+                      VUC_RUNTIME_ENGINE: e.target.value as 'python' | 'hvm' | 'bend',
+                    })
+                  }
+                  className="w-full p-2 bg-slate-900 border border-slate-700 rounded-lg text-white font-mono text-xs focus:outline-none focus:border-blue-500"
+                >
+                  <option value="python">python (PyTorch CPU Reference + Transformers)</option>
+                  <option value="hvm">hvm (Higher-order Virtual Machine HVM2)</option>
+                  <option value="bend">bend (Massively Parallel Interaction Nets)</option>
+                </select>
+                <p className="text-[11px] text-slate-500 font-sans">
+                  Alterna entre o harness Python de referência ou o avaliador paralelo Bend/HVM.
+                </p>
+              </div>
+
+              {/* RAM_GUARD_MB */}
+              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
+                <label className="text-slate-300 font-bold block flex items-center justify-between">
+                  <span>RAM_GUARD_MB</span>
+                  <span className="text-[10px] text-emerald-400 font-normal">Teto de Proteção</span>
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    value={bootstrapConfig.RAM_GUARD_MB}
+                    onChange={(e) =>
+                      setBootstrapConfig({
+                        ...bootstrapConfig,
+                        RAM_GUARD_MB: Number(e.target.value) || 6092,
+                      })
+                    }
+                    className="w-full p-2 bg-slate-900 border border-slate-700 rounded-lg text-white font-mono text-xs focus:outline-none focus:border-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setBootstrapConfig({ ...bootstrapConfig, RAM_GUARD_MB: 6092 })}
+                    className="px-2 py-1 bg-slate-900 text-slate-300 hover:text-white border border-slate-700 rounded text-[10px] whitespace-nowrap cursor-pointer"
+                  >
+                    CI (6092)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBootstrapConfig({ ...bootstrapConfig, RAM_GUARD_MB: 3400 })}
+                    className="px-2 py-1 bg-slate-900 text-slate-300 hover:text-white border border-slate-700 rounded text-[10px] whitespace-nowrap cursor-pointer"
+                  >
+                    GAIS (3400)
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-500 font-sans">
+                  Limite de memória RAM em megabytes antes de abortar o processo com OOM guard.
+                </p>
+              </div>
+
+              {/* BATCH_SIZE */}
+              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
+                <label className="text-slate-300 font-bold block flex items-center justify-between">
+                  <span>BATCH_SIZE</span>
+                  <span className="text-[10px] text-purple-400 font-normal">Modelos por Lote</span>
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={bootstrapConfig.BATCH_SIZE}
+                  onChange={(e) =>
+                    setBootstrapConfig({
+                      ...bootstrapConfig,
+                      BATCH_SIZE: Number(e.target.value) || 5,
+                    })
+                  }
+                  className="w-full p-2 bg-slate-900 border border-slate-700 rounded-lg text-white font-mono text-xs focus:outline-none focus:border-blue-500"
+                />
+                <p className="text-[11px] text-slate-500 font-sans">
+                  Quantidade de modelos avaliados por runner antes de forçar a liberação total de RAM.
+                </p>
+              </div>
+
+              {/* MODEL_CACHE_DIR */}
+              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
+                <label className="text-slate-300 font-bold block flex items-center justify-between">
+                  <span>MODEL_CACHE_DIR</span>
+                  <span className="text-[10px] text-indigo-400 font-normal">Diretório de Cache</span>
+                </label>
+                <input
+                  type="text"
+                  value={bootstrapConfig.MODEL_CACHE_DIR}
+                  onChange={(e) =>
+                    setBootstrapConfig({
+                      ...bootstrapConfig,
+                      MODEL_CACHE_DIR: e.target.value,
+                    })
+                  }
+                  className="w-full p-2 bg-slate-900 border border-slate-700 rounded-lg text-white font-mono text-xs focus:outline-none focus:border-blue-500"
+                />
+                <p className="text-[11px] text-slate-500 font-sans">
+                  Caminho do cache local mapeado para o actions/cache@v4 no GitHub Actions.
+                </p>
+              </div>
+            </div>
+
+            {/* Checkbox Toggles for Anti-Mock Enforcement */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-slate-800/80 font-mono text-xs">
+              <label className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-950 border border-slate-800 cursor-pointer hover:border-slate-700">
+                <input
+                  type="checkbox"
+                  checked={bootstrapConfig.QUANTIZE_1BIT_ENFORCED}
+                  onChange={(e) =>
+                    setBootstrapConfig({
+                      ...bootstrapConfig,
+                      QUANTIZE_1BIT_ENFORCED: e.target.checked,
+                    })
+                  }
+                  className="w-4 h-4 text-blue-600 rounded bg-slate-900 border-slate-700"
+                />
+                <div>
+                  <div className="text-white font-bold">QUANTIZE_1BIT_ENFORCED</div>
+                  <div className="text-[10px] text-slate-400 font-sans">Força BitNet ternário {'{-1, 0, +1}'} em modelos &gt; 0.5B</div>
+                </div>
+              </label>
+
+              <label className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-950 border border-slate-800 cursor-pointer hover:border-slate-700">
+                <input
+                  type="checkbox"
+                  checked={bootstrapConfig.ED25519_STRICT_ASSERT}
+                  onChange={(e) =>
+                    setBootstrapConfig({
+                      ...bootstrapConfig,
+                      ED25519_STRICT_ASSERT: e.target.checked,
+                    })
+                  }
+                  className="w-4 h-4 text-blue-600 rounded bg-slate-900 border-slate-700"
+                />
+                <div>
+                  <div className="text-white font-bold">ED25519_STRICT_ASSERT</div>
+                  <div className="text-[10px] text-slate-400 font-sans">Exige assinatura Ed25519 real de 128 hex chars sobre o Merkle root</div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          {/* .env Preview & Export */}
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-5 shadow-xl space-y-3 font-mono">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-800 text-xs">
+              <span className="flex items-center gap-1.5 text-white font-bold">
+                <FileCode className="w-4 h-4 text-emerald-400" />
+                Arquivo .env Gerado em Tempo Real
+              </span>
+              <button
+                onClick={handleCopyEnvFile}
+                className="flex items-center gap-1 text-cyan-400 hover:text-cyan-300 text-xs cursor-pointer"
+              >
+                {copiedEnv ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedEnv ? 'Copiado!' : 'Copiar .env'}</span>
+              </button>
+            </div>
+
+            <pre className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-emerald-300 text-xs overflow-x-auto leading-relaxed">
+              {BootstrapConfigEngine.formatAsEnvString(bootstrapConfig)}
+            </pre>
           </div>
         </div>
       )}

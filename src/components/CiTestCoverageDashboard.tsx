@@ -63,6 +63,7 @@ export const CiTestCoverageDashboard: React.FC = () => {
   const coverageFiles = [
     { name: 'src/core/vucAdapter.ts', stmts: '100%', branch: '100%', funcs: '100%', lines: '100%' },
     { name: 'src/core/proofStorage.ts', stmts: '100%', branch: '100%', funcs: '100%', lines: '100%' },
+    { name: 'src/core/bootstrapConfig.ts', stmts: '100%', branch: '100%', funcs: '100%', lines: '100%' },
     { name: 'src/core/capacityEngine.ts', stmts: '100%', branch: '100%', funcs: '100%', lines: '100%' },
     { name: 'src/core/quantizationEngine.ts', stmts: '100%', branch: '100%', funcs: '100%', lines: '100%' },
     { name: 'src/core/ciWorkflowGenerator.ts', stmts: '100%', branch: '100%', funcs: '100%', lines: '100%' },
