@@ -48,16 +48,23 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Node.js 20 & Run 100% Coverage Test Suite
+      - name: Set up Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+
+      - name: Install Dependencies
+        run: |
+          set -euo pipefail
+          if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then
+            npm ci
+          else
+            echo "::warning::No npm lockfile committed; using npm install for this CI revision."
+            npm install
+          fi
 
       - name: Verify 100% Strict Test Coverage (Anti-Mock Standards)
-        run: |
-          npm ci || npm install
-          npm run test:coverage
+        run: npm run test:coverage
 
       - name: Validate NPM Package Installability & CLI
         run: |
@@ -103,14 +110,7 @@ jobs:
 
       - name: Run VortexLiveBench & Merkle Trace Verification (Real Ed25519)
         run: |
-          python vuc_harness.py \
-            --batch "${{ matrix.batch }}" \
-            --runtime python \
-            --max-sub-half-b 0.5 \
-            --quantize-1bit \
-            --verify-merkle \
-            --ram-guard-mb 7000 \
-            --output-report "vuc_report_${{ matrix.batch }}.json"
+          python vuc_harness.py             --batch "${{ matrix.batch }}"             --runtime python             --max-sub-half-b 0.5             --quantize-1bit             --verify-merkle             --ram-guard-mb 7000             --output-report "vuc_report_${{ matrix.batch }}.json"
 
       - name: Upload Verifiable VUC Proof Attestation Artifacts
         uses: actions/upload-artifact@v4
