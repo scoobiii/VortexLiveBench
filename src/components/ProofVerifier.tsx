@@ -21,8 +21,11 @@ import {
   Sparkles,
   Layers,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  CloudUpload,
+  Cloud
 } from 'lucide-react';
+import { useFirebase } from '../firebase/FirebaseContext';
 
 interface ProofVerifierProps {
   initialProof: VucProofAttestation | null;
@@ -49,6 +52,9 @@ export const ProofVerifier: React.FC<ProofVerifierProps> = ({ initialProof }) =>
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isHistoryExpanded, setIsHistoryExpanded] = useState<boolean>(true);
+  const [savingCloud, setSavingCloud] = useState<boolean>(false);
+
+  const { user, saveProofToCloud } = useFirebase();
 
   // Load saved proofs from browser local storage on mount
   useEffect(() => {
@@ -104,6 +110,36 @@ export const ProofVerifier: React.FC<ProofVerifierProps> = ({ initialProof }) =>
 
     setSaveNotice(`Prova "${newItem.proofId}" salva no armazenamento local com sucesso!`);
     setTimeout(() => setSaveNotice(null), 3500);
+  };
+
+  const handleSaveToCloud = async (sharePublicly: boolean = false) => {
+    if (!jsonInput.trim()) return;
+    if (!user) {
+      setSaveNotice('Faça login com sua conta Google na barra superior para salvar no Firestore.');
+      setTimeout(() => setSaveNotice(null), 4000);
+      return;
+    }
+
+    setSavingCloud(true);
+    try {
+      const parsed: VucProofAttestation = JSON.parse(jsonInput);
+      const res = await saveProofToCloud(parsed, sharePublicly);
+      if (res.success) {
+        setSaveNotice(
+          `Prova "${parsed.proof_id}" gravada no Firestore (/users/${user.uid}/proofs)${
+            sharePublicly ? ' e compartilhada no registro público!' : '!'
+          }`
+        );
+      } else {
+        setSaveNotice(res.error || 'Erro ao sincronizar com o Firestore.');
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setSaveNotice(`Erro ao processar JSON: ${msg}`);
+    } finally {
+      setSavingCloud(false);
+      setTimeout(() => setSaveNotice(null), 4000);
+    }
   };
 
   const handleLoadSavedProof = (item: SavedVucProofItem) => {
@@ -210,7 +246,35 @@ export const ProofVerifier: React.FC<ProofVerifierProps> = ({ initialProof }) =>
               title="Salva a prova atual no armazenamento local do navegador para persistência entre sessões"
             >
               <BookmarkPlus className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Salvar no Local Storage</span>
+              <span>Salvar Local</span>
+            </button>
+
+            <button
+              onClick={() => handleSaveToCloud(false)}
+              disabled={!jsonInput.trim() || savingCloud}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono transition-all cursor-pointer ${
+                !jsonInput.trim() || savingCloud
+                  ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                  : 'bg-indigo-600 hover:bg-indigo-500 text-white font-bold shadow-md shadow-indigo-600/20 active:scale-95'
+              }`}
+              title="Salva no Firebase Firestore na coleção users/{uid}/proofs"
+            >
+              <CloudUpload className="w-3.5 h-3.5" />
+              <span>{savingCloud ? 'Salvando...' : 'Nuvem Firestore'}</span>
+            </button>
+
+            <button
+              onClick={() => handleSaveToCloud(true)}
+              disabled={!jsonInput.trim() || savingCloud}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono transition-all cursor-pointer ${
+                !jsonInput.trim() || savingCloud
+                  ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                  : 'bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-700/60 shadow-sm active:scale-95'
+              }`}
+              title="Registra a prova verificada no benchmark público global"
+            >
+              <Cloud className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Publicar Global</span>
             </button>
 
             <button

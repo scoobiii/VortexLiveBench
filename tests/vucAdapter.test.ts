@@ -3,10 +3,11 @@ import {
   sha256,
   computeMerkleRoot,
   VucAdapter,
+  VucLlmRuntimeAdapter,
   Ed25519Engine,
   TokenizerVocabEngine,
 } from '../src/core/vucAdapter';
-import { LLMModel, VucProofAttestation } from '../src/types/vuc';
+import { LLMModel, VucProofAttestation, ModelSpec } from '../src/types/vuc';
 
 const mockModel: LLMModel = {
   id: 'test-model-0.5b',
@@ -298,6 +299,86 @@ describe('vucAdapter with strict VUC Rules', () => {
         progressSteps.push(step.step);
       });
       expect(progressSteps).toEqual([1, 2]);
+    });
+  });
+
+  describe('VucLlmRuntimeAdapter (Sprint 1 Contract)', () => {
+    const validSpec: ModelSpec = {
+      id: 'smollm2-135m-instruct',
+      name: 'SmolLM2-135M-Instruct',
+      repoOrPath: 'HuggingFaceTB/SmolLM2-135M-Instruct',
+      runtime: 'transformers',
+      device: 'cpu',
+      quantization: 'native_fp16',
+      paramCountBillion: 0.135,
+      weightsSha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+      tensorMerkleRoot: 'a591a6d40bf420404a011733cfb7b190d62c65bf0bcda32b57b277d9ad9f146e',
+      tokenizerName: 'smollm2',
+    };
+
+    it('resolves valid modelSpec and rejects incomplete spec', async () => {
+      const adapter = new VucLlmRuntimeAdapter();
+      const ok = await adapter.resolveModel(validSpec);
+      expect(ok).toBe(true);
+
+      const invalidSpec = { ...validSpec, weightsSha256: '' };
+      const fail = await adapter.resolveModel(invalidSpec);
+      expect(fail).toBe(false);
+    });
+
+    it('loads resolved model and fails on invalid spec', async () => {
+      const adapter = new VucLlmRuntimeAdapter();
+      const loaded = await adapter.load(validSpec);
+      expect(loaded).toBe(true);
+
+      const invalidSpec = { ...validSpec, id: '' };
+      const loadedFail = await adapter.load(invalidSpec);
+      expect(loadedFail).toBe(false);
+    });
+
+    it('tokenizes prompt with real token IDs from tokenizer vocabulary', async () => {
+      const adapter = new VucLlmRuntimeAdapter(validSpec);
+      const { tokens, tokenIds } = await adapter.tokenize('VERIFIABLE Merkle root');
+      expect(tokens).toEqual(['VERIFIABLE', 'Merkle', 'root']);
+      expect(tokenIds).toEqual([44321, 21491, 3110]);
+
+      // Fallback for empty text
+      const empty = await adapter.tokenize('');
+      expect(empty.tokens).toHaveLength(2);
+      expect(empty.tokenIds).toHaveLength(2);
+    });
+
+    it('executes infer() and returns ExecutionResult with REAL fidelity', async () => {
+      const adapter = new VucLlmRuntimeAdapter(validSpec);
+      await adapter.load(validSpec);
+
+      const res = await adapter.infer('What is 2+2?', 4, 42);
+      expect(res.state).toBe('EXECUTED');
+      expect(res.fidelity).toBe('REAL');
+      expect(res.model).toEqual(validSpec);
+      expect(res.promptHash).toHaveLength(64);
+      expect(res.merkleRoot).toHaveLength(64);
+      expect(res.signatureEd25519).toHaveLength(128);
+      expect(res.trace.length).toBeGreaterThan(0);
+      expect(res.metrics.latencyMs).toBeGreaterThanOrEqual(0);
+      expect(res.metrics.throughputTokensPerSec).toBeGreaterThan(0);
+
+      // Verify collected metrics
+      const metrics = adapter.collectMetrics();
+      expect(metrics.totalDurationMs).toBeGreaterThanOrEqual(0);
+
+      // Verify emitExecutionEvidence returns attestation
+      const evidence = adapter.emitExecutionEvidence(res);
+      expect(evidence.proof_id).toBeDefined();
+
+      // Verify attestation with verifyAttestation()
+      const ver = await adapter.verifyAttestation(evidence);
+      expect(ver.isValid).toBe(true);
+    });
+
+    it('throws error when infer() is called without load/resolve', async () => {
+      const adapter = new VucLlmRuntimeAdapter();
+      await expect(adapter.infer('prompt')).rejects.toThrow('No ModelSpec resolved before infer()');
     });
   });
 });

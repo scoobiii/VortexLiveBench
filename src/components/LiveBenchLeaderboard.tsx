@@ -8,8 +8,11 @@ import {
   CheckCircle2, 
   Zap, 
   Cpu, 
-  Clock 
+  Clock,
+  Cloud,
+  ShieldCheck
 } from 'lucide-react';
+import { useFirebase } from '../firebase/FirebaseContext';
 
 interface LiveBenchLeaderboardProps {
   models: LLMModel[];
@@ -18,6 +21,7 @@ interface LiveBenchLeaderboardProps {
 type SortField = 'overall' | 'reasoning' | 'coding' | 'math' | 'instruction' | 'vucVerificationMs' | 'tokensPerSec' | 'quantizedSizeMB';
 
 export const LiveBenchLeaderboard: React.FC<LiveBenchLeaderboardProps> = ({ models }) => {
+  const { publicProofsList, cloudProofs, user } = useFirebase();
   const [sortField, setSortField] = useState<SortField>('overall');
   const [sortAsc, setSortAsc] = useState<boolean>(false);
 
@@ -226,6 +230,60 @@ export const LiveBenchLeaderboard: React.FC<LiveBenchLeaderboardProps> = ({ mode
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Real-time Firebase Firestore Benchmark Attestations */}
+      <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-5 shadow-xl space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-800 gap-2">
+          <div>
+            <h3 className="font-bold text-white text-sm font-mono flex items-center gap-2">
+              <Cloud className="w-4 h-4 text-cyan-400" />
+              Provas VUC Sincronizadas no Firebase Firestore
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5 font-sans">
+              Até 25 provas registradas em tempo real na coleção pública ou privada do Firestore.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 text-xs font-mono">
+            <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800/60">
+              {publicProofsList.length} Públicas
+            </span>
+            {user && (
+              <span className="px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800/60">
+                {cloudProofs.length} Minhas Provas
+              </span>
+            )}
+          </div>
+        </div>
+
+        {publicProofsList.length === 0 && cloudProofs.length === 0 ? (
+          <div className="p-6 text-center text-xs font-mono text-slate-500 rounded-xl bg-slate-950/60 border border-dashed border-slate-800">
+            Nenhuma prova sincronizada na nuvem ainda. Execute uma inferência no Runner ou verifique uma prova e clique em &quot;Publicar Global&quot; para registrar no Firestore.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 font-mono text-xs">
+            {publicProofsList.slice(0, 6).map((proof) => (
+              <div
+                key={proof.proof_id}
+                className="p-3.5 rounded-xl bg-slate-950 border border-slate-800/80 space-y-1.5 hover:border-cyan-800/60 transition-colors"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-white truncate max-w-[200px]">{proof.model.name}</span>
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px] flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                    {proof.status}
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-400 truncate">
+                  ID: <span className="text-slate-300">{proof.proof_id}</span>
+                </div>
+                <div className="text-[10px] text-slate-500 truncate">
+                  Merkle Root: <span className="text-cyan-400">{proof.execution.merkle_root.slice(0, 16)}...</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

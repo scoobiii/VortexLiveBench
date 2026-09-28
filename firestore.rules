@@ -1,0 +1,121 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. Global Safety Net: Default-deny all access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['userId', 'email', 'createdAt']) &&
+        data.keys().hasOnly(['userId', 'email', 'displayName', 'photoURL', 'createdAt']) &&
+        data.userId is string && data.userId == request.auth.uid &&
+        data.email is string && data.email.size() <= 256 &&
+        (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 128)) &&
+        (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 1024)) &&
+        data.createdAt is string && data.createdAt.size() <= 64;
+    }
+
+    function isValidProof(data) {
+      return data.keys().hasAll(['proofId', 'userId', 'modelId', 'merkleRoot', 'signatureEd25519', 'status', 'createdAt']) &&
+        data.keys().hasOnly([
+          'proofId', 'userId', 'modelId', 'modelName', 'prompt', 'promptHash',
+          'merkleRoot', 'signatureEd25519', 'publicKeyHex', 'outputText',
+          'tokensCount', 'peakRamMb', 'status', 'createdAt'
+        ]) &&
+        data.proofId is string && isValidId(data.proofId) &&
+        data.userId is string && data.userId == request.auth.uid &&
+        data.modelId is string && data.modelId.size() <= 128 &&
+        (!('modelName' in data) || (data.modelName is string && data.modelName.size() <= 128)) &&
+        (!('prompt' in data) || (data.prompt is string && data.prompt.size() <= 4096)) &&
+        (!('promptHash' in data) || (data.promptHash is string && data.promptHash.size() <= 64)) &&
+        data.merkleRoot is string && data.merkleRoot.size() <= 64 &&
+        data.signatureEd25519 is string && data.signatureEd25519.size() <= 128 &&
+        (!('publicKeyHex' in data) || (data.publicKeyHex is string && data.publicKeyHex.size() <= 64)) &&
+        (!('outputText' in data) || (data.outputText is string && data.outputText.size() <= 8192)) &&
+        (!('tokensCount' in data) || (data.tokensCount is number && data.tokensCount >= 0)) &&
+        (!('peakRamMb' in data) || (data.peakRamMb is number && data.peakRamMb >= 0)) &&
+        (data.status == 'VERIFIED_VALID' || data.status == 'TAMPERED' || data.status == 'PENDING') &&
+        data.createdAt is string && data.createdAt.size() <= 64;
+    }
+
+    function isValidBootstrapConfig(data) {
+      return data.keys().hasAll([
+        'userId', 'RUNNER_ARCH_MODE', 'GPU_ACCELERATION_ENABLED', 'VUC_RUNTIME_ENGINE',
+        'RAM_GUARD_MB', 'BATCH_SIZE', 'QUANTIZE_1BIT_ENFORCED', 'ED25519_STRICT_ASSERT',
+        'MODEL_CACHE_DIR'
+      ]) &&
+        data.keys().hasOnly([
+          'userId', 'RUNNER_ARCH_MODE', 'GPU_ACCELERATION_ENABLED', 'VUC_RUNTIME_ENGINE',
+          'RAM_GUARD_MB', 'BATCH_SIZE', 'QUANTIZE_1BIT_ENFORCED', 'ED25519_STRICT_ASSERT',
+          'MODEL_CACHE_DIR', 'updatedAt'
+        ]) &&
+        data.userId is string && data.userId == request.auth.uid &&
+        (data.RUNNER_ARCH_MODE == 'x86_64_avx2' || data.RUNNER_ARCH_MODE == 'arm64_neon' || data.RUNNER_ARCH_MODE == 'cuda_sm80') &&
+        data.GPU_ACCELERATION_ENABLED is bool &&
+        (data.VUC_RUNTIME_ENGINE == 'python' || data.VUC_RUNTIME_ENGINE == 'hvm' || data.VUC_RUNTIME_ENGINE == 'bend') &&
+        data.RAM_GUARD_MB is number && data.RAM_GUARD_MB > 0 &&
+        data.BATCH_SIZE is number && data.BATCH_SIZE > 0 &&
+        data.QUANTIZE_1BIT_ENFORCED is bool &&
+        data.ED25519_STRICT_ASSERT is bool &&
+        data.MODEL_CACHE_DIR is string && data.MODEL_CACHE_DIR.size() <= 256 &&
+        (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 64));
+    }
+
+    // 2. User Profiles
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow list: if false;
+      allow create: if isOwner(userId) && isValidId(userId) && isValidUserProfile(incoming());
+      allow update: if isOwner(userId) && isValidId(userId) && isValidUserProfile(incoming()) && incoming().userId == existing().userId;
+      allow delete: if false;
+
+      // 3. User Verifiable Proofs Subcollection
+      match /proofs/{proofId} {
+        allow get: if isOwner(userId) && isValidId(proofId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(proofId) && isValidProof(incoming());
+        allow update: if false; // Cryptographic proofs are strictly immutable
+        allow delete: if isOwner(userId) && isValidId(proofId);
+      }
+
+      // 4. User Bootstrap Preferences Subcollection
+      match /bootstrapConfig/{docId} {
+        allow get: if isOwner(userId) && isValidId(docId);
+        allow list: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidId(docId) && isValidBootstrapConfig(incoming());
+        allow delete: if isOwner(userId) && isValidId(docId);
+      }
+    }
+
+    // 5. Public Benchmark Proofs Collection (Shared benchmark attestation registry)
+    match /publicProofs/{proofId} {
+      allow get: if isValidId(proofId);
+      allow list: if true;
+      allow create: if isSignedIn() && isValidId(proofId) && isValidProof(incoming()) && incoming().status == 'VERIFIED_VALID';
+      allow update, delete: if false; // Public attestations are immutable
+    }
+  }
+}

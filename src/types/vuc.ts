@@ -100,3 +100,75 @@ export interface CiRunnerConfig {
   enableVucVerificationAssert: boolean;
   parallelJobs: number;
 }
+
+// ==========================================
+// VUC LLM RUNTIME ADAPTER CONTRACT (SPRINT 1)
+// ==========================================
+
+export type ExecutionState =
+  | 'DISCOVERED'
+  | 'DOWNLOADED'
+  | 'LOADED'
+  | 'EXECUTED'
+  | 'MEASURED'
+  | 'VERIFIED'
+  | 'FAILED';
+
+export type ComponentFidelity = 'REAL' | 'PARTIAL' | 'MOCK' | 'UNVERIFIED';
+
+export type RuntimeType = 'transformers' | 'llamacpp' | 'bitnet' | 'bend' | 'onnx';
+export type DeviceTarget = 'cpu' | 'cuda' | 'metal' | 'bend';
+
+export interface ModelSpec {
+  id: string;
+  name: string;
+  repoOrPath: string;
+  runtime: RuntimeType;
+  device: DeviceTarget;
+  quantization: QuantizationType;
+  paramCountBillion: number;
+  weightsSha256: string;
+  tensorMerkleRoot: string;
+  tokenizerName: string;
+}
+
+export interface ExecutionMetrics {
+  latencyMs: number;
+  throughputTokensPerSec: number;
+  timeToFirstTokenMs: number;
+  totalDurationMs: number;
+  peakRamMb: number;
+  peakVramMb?: number;
+  cpuUtilizationPercent?: number;
+}
+
+export interface ExecutionResult {
+  state: ExecutionState;
+  fidelity: ComponentFidelity;
+  model: ModelSpec;
+  prompt: string;
+  promptHash: string;
+  seed: number;
+  temperature: number;
+  outputText: string;
+  tokens: { token: string; tokenId: number }[];
+  trace: MerkleStep[];
+  merkleRoot: string;
+  signatureEd25519: string;
+  publicKeyHex: string;
+  metrics: ExecutionMetrics;
+  attestation: VucProofAttestation;
+  taskScore?: number;
+  error?: string;
+}
+
+export interface IVucLlmAdapter {
+  resolveModel(modelSpec: ModelSpec): Promise<boolean>;
+  load(modelSpec: ModelSpec): Promise<boolean>;
+  tokenize(text: string): Promise<{ tokens: string[]; tokenIds: number[] }>;
+  infer(prompt: string, maxTokens?: number, seed?: number): Promise<ExecutionResult>;
+  collectMetrics(): ExecutionMetrics;
+  emitExecutionEvidence(result: ExecutionResult): VucProofAttestation;
+  verifyAttestation(attestation: VucProofAttestation): Promise<{ isValid: boolean; details: string }>;
+}
+

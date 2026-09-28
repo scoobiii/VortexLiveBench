@@ -10,6 +10,7 @@ import { LiveBenchLeaderboard } from './components/LiveBenchLeaderboard';
 import { CiWorkflowModal } from './components/CiWorkflowModal';
 import { CiTestCoverageDashboard } from './components/CiTestCoverageDashboard';
 import { ArchitectureAndTelemetryDashboard } from './components/ArchitectureAndTelemetryDashboard';
+import { FirebaseProvider } from './firebase/FirebaseContext';
 import { 
   Layers, 
   Play, 
@@ -68,17 +69,18 @@ export default function App() {
   const totalQuantized = currentVisibleModels.filter((m) => m.quantization !== 'native_fp16').length;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
-      {/* Top Navbar */}
-      <Navbar
-        activeBatches={activeBatches}
-        totalModels={currentVisibleModels.length}
-        totalQuantized={totalQuantized}
-        onScaleBatch={handleScaleBatch}
-        onOpenCiModal={() => setIsCiModalOpen(true)}
-        runnerRamUsedMB={maxModelRamMB + 350} // including python overhead
-        maxRunnerRamMB={GITHUB_ACTIONS_RUNNER_LIMITS.maxRamMB}
-      />
+    <FirebaseProvider>
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+        {/* Top Navbar */}
+        <Navbar
+          activeBatches={activeBatches}
+          totalModels={currentVisibleModels.length}
+          totalQuantized={totalQuantized}
+          onScaleBatch={handleScaleBatch}
+          onOpenCiModal={() => setIsCiModalOpen(true)}
+          runnerRamUsedMB={maxModelRamMB + 350} // including python overhead
+          maxRunnerRamMB={GITHUB_ACTIONS_RUNNER_LIMITS.maxRamMB}
+        />
 
       {/* Floating scale toast */}
       {scaleToast && (
@@ -266,5 +268,6 @@ export default function App() {
         models={currentVisibleModels}
       />
     </div>
+  </FirebaseProvider>
   );
 }

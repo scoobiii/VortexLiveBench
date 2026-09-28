@@ -21,11 +21,15 @@ import {
   Settings,
   Save,
   RotateCcw,
-  Sliders
+  Sliders,
+  Cloud,
+  CloudUpload,
+  CloudDownload
 } from 'lucide-react';
 import { RunnerTelemetryEngine } from '../core/runnerTelemetry';
 import { CapacityEngine } from '../core/capacityEngine';
 import { BootstrapConfigEngine, BootstrapEnvConfig } from '../core/bootstrapConfig';
+import { useFirebase } from '../firebase/FirebaseContext';
 
 export const ArchitectureAndTelemetryDashboard: React.FC = () => {
   const [activeSection, setActiveSection] = useState<'resources' | 'grafana' | 'repoAndCi' | 'patterns' | 'capacity' | 'bootstrap'>('resources');
@@ -39,6 +43,9 @@ export const ArchitectureAndTelemetryDashboard: React.FC = () => {
     BootstrapConfigEngine.getStoredConfig()
   );
   const [savedToast, setSavedToast] = useState<string | null>(null);
+  const [syncingCloud, setSyncingCloud] = useState<boolean>(false);
+
+  const { user, isOnline, syncBootstrapToCloud, loadBootstrapFromCloud } = useFirebase();
 
   const resourceProfiles = RunnerTelemetryEngine.getRunnerResourceProfiles();
   const alertRulesYaml = RunnerTelemetryEngine.generatePrometheusAlertRules();
@@ -73,6 +80,54 @@ export const ArchitectureAndTelemetryDashboard: React.FC = () => {
     navigator.clipboard.writeText(envStr);
     setCopiedEnv(true);
     setTimeout(() => setCopiedEnv(false), 2000);
+  };
+
+  const handleSyncToFirestore = async () => {
+    if (!user) {
+      setSavedToast('Faça login com sua conta Google na barra superior para sincronizar com o Firestore.');
+      setTimeout(() => setSavedToast(null), 3500);
+      return;
+    }
+    setSyncingCloud(true);
+    try {
+      const res = await syncBootstrapToCloud(bootstrapConfig);
+      if (res.success) {
+        setSavedToast('Configurações salvas no Firestore Cloud (/users/' + user.uid + '/bootstrapConfig/current)!');
+      } else {
+        setSavedToast(res.error || 'Erro ao sincronizar com o Firestore.');
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setSavedToast(`Erro no Firestore: ${msg}`);
+    } finally {
+      setSyncingCloud(false);
+      setTimeout(() => setSavedToast(null), 3500);
+    }
+  };
+
+  const handleLoadFromFirestore = async () => {
+    if (!user) {
+      setSavedToast('Faça login com sua conta Google para carregar do Firestore.');
+      setTimeout(() => setSavedToast(null), 3500);
+      return;
+    }
+    setSyncingCloud(true);
+    try {
+      const cloudCfg = await loadBootstrapFromCloud();
+      if (cloudCfg) {
+        setBootstrapConfig(cloudCfg);
+        BootstrapConfigEngine.saveConfig(cloudCfg);
+        setSavedToast('Configurações recuperadas do Firestore e sincronizadas localmente!');
+      } else {
+        setSavedToast('Nenhuma configuração encontrada no Firestore para seu usuário.');
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setSavedToast(`Erro ao ler do Firestore: ${msg}`);
+    } finally {
+      setSyncingCloud(false);
+      setTimeout(() => setSavedToast(null), 3500);
+    }
   };
 
   const handleCopyAlertRules = () => {
@@ -677,13 +732,33 @@ vortex-livebench --help
                 </p>
               </div>
 
-              <div className="flex items-center gap-2 font-mono text-xs">
+              <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
                 <button
                   onClick={handleSaveBootstrapConfig}
                   className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-md"
                 >
                   <Save className="w-3.5 h-3.5" />
-                  <span>Salvar no LocalStorage</span>
+                  <span>Salvar Local</span>
+                </button>
+
+                <button
+                  onClick={handleSyncToFirestore}
+                  disabled={syncingCloud}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-md"
+                  title="Sincronizar variáveis no Firestore (requer Google Login)"
+                >
+                  <CloudUpload className="w-3.5 h-3.5" />
+                  <span>{syncingCloud ? 'Sincronizando...' : 'Nuvem (Firestore)'}</span>
+                </button>
+
+                <button
+                  onClick={handleLoadFromFirestore}
+                  disabled={syncingCloud}
+                  className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-cyan-800/60 flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Baixar preferências salvas no Firestore"
+                >
+                  <CloudDownload className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Baixar Nuvem</span>
                 </button>
 
                 <button
@@ -691,7 +766,7 @@ vortex-livebench --help
                   className="px-2.5 py-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800 flex items-center gap-1.5 transition-colors cursor-pointer text-xs"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Restaurar Padrões</span>
+                  <span>Restaurar</span>
                 </button>
               </div>
             </div>

@@ -1,0 +1,210 @@
+{
+  "entities": {
+    "userProfile": {
+      "title": "UserProfile",
+      "description": "User profile metadata for authenticated users",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID",
+          "maxLength": 128
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "User email address",
+          "maxLength": 256
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User display name",
+          "maxLength": 128
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "User avatar URL",
+          "maxLength": 1024
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Account registration timestamp"
+        }
+      },
+      "required": ["userId", "email", "createdAt"]
+    },
+    "proof": {
+      "title": "VucProof",
+      "description": "Verifiable Universal Computation proof attestation record",
+      "type": "object",
+      "properties": {
+        "proofId": {
+          "type": "string",
+          "description": "Cryptographic proof ID",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "description": "Author UID",
+          "maxLength": 128
+        },
+        "modelId": {
+          "type": "string",
+          "description": "Evaluated model identifier",
+          "maxLength": 128
+        },
+        "modelName": {
+          "type": "string",
+          "description": "Human-readable model name",
+          "maxLength": 128
+        },
+        "prompt": {
+          "type": "string",
+          "description": "Inference prompt text",
+          "maxLength": 4096
+        },
+        "promptHash": {
+          "type": "string",
+          "description": "SHA-256 hash of the prompt",
+          "maxLength": 64
+        },
+        "merkleRoot": {
+          "type": "string",
+          "description": "SHA-256 Merkle root of execution trace",
+          "maxLength": 64
+        },
+        "signatureEd25519": {
+          "type": "string",
+          "description": "128-hex-char Ed25519 cryptographic signature",
+          "maxLength": 128
+        },
+        "publicKeyHex": {
+          "type": "string",
+          "description": "64-hex-char Ed25519 public key",
+          "maxLength": 64
+        },
+        "outputText": {
+          "type": "string",
+          "description": "Generated response tokens concatenated",
+          "maxLength": 8192
+        },
+        "tokensCount": {
+          "type": "number",
+          "description": "Number of tokens in verifiable trace"
+        },
+        "peakRamMb": {
+          "type": "number",
+          "description": "Peak RAM footprint during execution"
+        },
+        "status": {
+          "type": "string",
+          "description": "Verification status",
+          "enum": ["VERIFIED_VALID", "TAMPERED", "PENDING"]
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation timestamp ISO string"
+        }
+      },
+      "required": [
+        "proofId",
+        "userId",
+        "modelId",
+        "merkleRoot",
+        "signatureEd25519",
+        "status",
+        "createdAt"
+      ]
+    },
+    "bootstrapConfig": {
+      "title": "BootstrapEnvConfig",
+      "description": "Persistent runner bootstrap preferences synced to cloud",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner UID",
+          "maxLength": 128
+        },
+        "RUNNER_ARCH_MODE": {
+          "type": "string",
+          "description": "Target architecture instruction set",
+          "enum": ["x86_64_avx2", "arm64_neon", "cuda_sm80"]
+        },
+        "GPU_ACCELERATION_ENABLED": {
+          "type": "boolean",
+          "description": "Whether GPU compute is active"
+        },
+        "VUC_RUNTIME_ENGINE": {
+          "type": "string",
+          "description": "Execution engine",
+          "enum": ["python", "hvm", "bend"]
+        },
+        "RAM_GUARD_MB": {
+          "type": "number",
+          "description": "Memory ceiling limit"
+        },
+        "BATCH_SIZE": {
+          "type": "number",
+          "description": "Batch evaluation size"
+        },
+        "QUANTIZE_1BIT_ENFORCED": {
+          "type": "boolean",
+          "description": "Enforce 1-bit quantization on >0.5B models"
+        },
+        "ED25519_STRICT_ASSERT": {
+          "type": "boolean",
+          "description": "Strict Ed25519 signature assertion"
+        },
+        "MODEL_CACHE_DIR": {
+          "type": "string",
+          "description": "Cache folder path",
+          "maxLength": 256
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Last update ISO timestamp"
+        }
+      },
+      "required": [
+        "userId",
+        "RUNNER_ARCH_MODE",
+        "GPU_ACCELERATION_ENABLED",
+        "VUC_RUNTIME_ENGINE",
+        "RAM_GUARD_MB",
+        "BATCH_SIZE",
+        "QUANTIZE_1BIT_ENFORCED",
+        "ED25519_STRICT_ASSERT",
+        "MODEL_CACHE_DIR"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "userProfile"
+      },
+      "description": "User profile documents accessible only to owner"
+    },
+    "/users/{userId}/proofs/{proofId}": {
+      "schema": {
+        "$ref": "proof"
+      },
+      "description": "Private verifiable proofs created by user"
+    },
+    "/users/{userId}/bootstrapConfig/current": {
+      "schema": {
+        "$ref": "bootstrapConfig"
+      },
+      "description": "User runner auto-configuration environment preferences"
+    },
+    "/publicProofs/{proofId}": {
+      "schema": {
+        "$ref": "proof"
+      },
+      "description": "Publicly visible verified VUC proof benchmarks"
+    }
+  }
+}
