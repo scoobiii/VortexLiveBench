@@ -1,0 +1,6 @@
+{
+  "name": "VUC LiveBench & 1-Bit Matrix CI",
+  "description": "Verifiable Universal Computation (VUC) adapter core and LiveBench harness for sub-0.5B open source LLMs and 1-bit quantized models with batched GitHub Actions CI runner integration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
