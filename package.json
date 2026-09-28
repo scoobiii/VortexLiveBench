@@ -1,7 +1,7 @@
 {
   "name": "vortex-livebench",
   "version": "1.0.0",
-  "description": "VortexLiveBench - Deterministic VUC LLM Verification Engine with 1-Bit Quantization and Merkle Attestations",
+  "description": "VortexLiveBench - benchmark orchestration and measurement layer for VUC-governed real LLM execution",
   "type": "module",
   "bin": {
     "vortex-livebench": "./bin/vortex-livebench.js"
@@ -10,8 +10,6 @@
     "dist",
     "bin",
     "README.md",
-    "vuc_harness.py",
-    "vuc_merkle.bend",
     "AGENTS.md"
   ],
   "scripts": {
@@ -21,7 +19,8 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "prepublishOnly": "npm run lint && npm run build"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -42,10 +41,14 @@
     "@types/react-dom": "^19.3.0",
     "@vitest/coverage-v8": "^5.0.2",
     "autoprefixer": "^10.4.21",
-    "esbuild": "^0.25.0",
+    "esbuild": "^0.28.2",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.21.0",
     "typescript": "^7.0.2",
     "vitest": "^5.0.2"
+  },
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.0.0"
   }
 }

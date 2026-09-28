@@ -1,4 +1,4 @@
-name: VortexLiveBench VUC Matrix & Anti-Mock Verification
+name: VortexLiveBench S0 Reality & Supply-Chain Gate
 
 on:
   push:
@@ -6,117 +6,70 @@ on:
   pull_request:
     branches: [main, master]
   workflow_dispatch:
-    inputs:
-      active_batches:
-        description: 'Number of 5-model batches to evaluate'
-        required: false
-        default: '3'
-      runtime:
-        description: 'Execution runtime (python, hvm, bend)'
-        required: false
-        default: 'python'
-      quantize_1bit:
-        description: 'Enforce 1-Bit BitNet quantization on models > 0.5B'
-        type: boolean
-        default: true
-      strict_merkle_assert:
-        description: 'Fail CI if cryptographic trace Merkle root differs'
-        type: boolean
-        default: true
+
+permissions:
+  contents: read
 
 jobs:
-  prepare-matrix:
+  reality-gate:
     runs-on: ubuntu-latest
-    outputs:
-      batches: ${{ steps.set-batches.outputs.batches }}
-    steps:
-      - name: Compute Matrix Batches
-        id: set-batches
-        run: |
-          echo "batches=[\"batch-1\",\"batch-2\",\"batch-3\"]" >> $GITHUB_OUTPUT
-
-  vortex-livebench-runner:
-    needs: prepare-matrix
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        batch: ${{ fromJson(needs.prepare-matrix.outputs.batches) }}
-    timeout-minutes: 180
-
+    timeout-minutes: 30
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Node.js 20 & Run 100% Coverage Test Suite
+      - name: Set up Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: '22'
 
-      - name: Verify 100% Strict Test Coverage (Anti-Mock Standards)
+      - name: Require Deterministic npm Lockfile
         run: |
-          npm ci || npm install
-          npm run test:coverage
+          set -euo pipefail
+          test -f package-lock.json || test -f npm-shrinkwrap.json || {
+            echo "::error::A committed npm lockfile is mandatory. Refusing dependency resolution without a lockfile."
+            exit 1
+          }
 
-      - name: Validate NPM Package Installability & CLI
+      - name: Install Dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Verify Node/npm Contract
         run: |
-          npm run build
-          npm pack --dry-run
-          node bin/vortex-livebench.js capacity --env github-ci
-          node bin/vortex-livebench.js matrix
+          set -euo pipefail
+          node --version
+          npm --version
+          node -e 'const p=require("./package.json"); if (!p.engines?.node || !p.engines.node.includes("22")) { throw new Error("package.json must declare the Node 22 contract"); }'
 
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: 'pip'
+      - name: Lint
+        run: npm run lint
 
-      - name: Validate Runner RAM Budget (7GB Limit Guard)
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Validate Published Package Contents
         run: |
-          echo "=== Free Memory Before Run ==="
-          free -h
-          AVAILABLE_RAM_MB=$(free -m | awk '/^Mem:/{print $7}')
-          echo "Available RAM: ${AVAILABLE_RAM_MB} MB"
-          if [ "$AVAILABLE_RAM_MB" -lt 5500 ]; then
-            echo "::warning::Low initial RAM on GitHub runner. Enforcing aggressive 1-bit memory cleanup."
+          set -euo pipefail
+          npm pack --dry-run 2>&1 | tee /tmp/npm-pack.txt
+          grep -F "README.md" /tmp/npm-pack.txt
+          grep -F "bin/vortex-livebench.js" /tmp/npm-pack.txt
+          grep -F "vuc_harness.py" /tmp/npm-pack.txt
+
+      - name: S0 Reality Gate - Reject Synthetic Benchmark Execution
+        run: |
+          set -euo pipefail
+          if grep -RInE --exclude-dir=.git --exclude='S0_REALITY_BASELINE.md'             'VOCAB_MAP|10000 \+ .*hash\(|TENSOR_.*model|peak_ram_mb.*size_mb.*\+ 120|VERIFIABLE.*STATE.*TRANSITION|runtime: python.*vuc_harness|VERIFIED_VALID'             .; then
+            echo "::error::Synthetic/mock execution constructs are present in the benchmark repository path. They cannot be accepted as real benchmark evidence."
+            exit 1
           fi
 
-      - name: Install VUC Core, Cryptography & PyTorch CPU
+      - name: S0 Reality Gate - Legacy Harness Must Not Emit Evidence
         run: |
-          python -m pip install --upgrade pip
-          pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install transformers accelerate huggingface_hub cryptography blake3 requests
-
-      - name: Install Bend & HVM (Higher-order Virtual Machine)
-        run: |
-          echo "Setting up Bend & HVM interaction combinator runtime..."
-          curl -sSL https://raw.githubusercontent.com/HigherOrderCO/HVM/master/install.sh -o /tmp/install_hvm.sh 2>/dev/null || true
-
-      - name: Cache Quantized Model Checkpoints
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/vuc_models
-          key: vuc-models-${{ matrix.batch }}-${{ hashFiles('vuc_models_config.json') }}
-          restore-keys: |
-            vuc-models-${{ matrix.batch }}-
-
-      - name: Run VortexLiveBench & Merkle Trace Verification (Real Ed25519)
-        run: |
-          python vuc_harness.py \
-            --batch "${{ matrix.batch }}" \
-            --runtime python \
-            --max-sub-half-b 0.5 \
-            --quantize-1bit \
-            --verify-merkle \
-            --ram-guard-mb 7000 \
-            --output-report "vuc_report_${{ matrix.batch }}.json"
-
-      - name: Upload Verifiable VUC Proof Attestation Artifacts
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: vuc-attestations-${{ matrix.batch }}
-          path: |
-            vuc_report_*.json
-            proofs/*.vuc.json
+          set -euo pipefail
+          if grep -RInE --exclude-dir=.git             'vuc_harness\.py|Run VortexLiveBench.*Merkle|vuc-attestations-'             .github/workflows; then
+            echo "::error::CI must not execute or publish the legacy synthetic harness as benchmark evidence."
+            exit 1
+          fi
