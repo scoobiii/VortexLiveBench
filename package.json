@@ -1,8 +1,19 @@
 {
-  "name": "react-example",
-  "private": true,
-  "version": "0.0.0",
+  "name": "vortex-livebench",
+  "version": "1.0.0",
+  "description": "VortexLiveBench - Deterministic VUC LLM Verification Engine with 1-Bit Quantization and Merkle Attestations",
   "type": "module",
+  "bin": {
+    "vortex-livebench": "./bin/vortex-livebench.js"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "README.md",
+    "vuc_harness.py",
+    "vuc_merkle.bend",
+    "AGENTS.md"
+  ],
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",

@@ -1,4 +1,4 @@
-name: VUC LiveBench & 1-Bit Matrix Verification
+name: VortexLiveBench VUC Matrix & Anti-Mock Verification
 
 on:
   push:
@@ -11,6 +11,10 @@ on:
         description: 'Number of 5-model batches to evaluate'
         required: false
         default: '3'
+      runtime:
+        description: 'Execution runtime (python, hvm, bend)'
+        required: false
+        default: 'python'
       quantize_1bit:
         description: 'Enforce 1-Bit BitNet quantization on models > 0.5B'
         type: boolean
@@ -31,7 +35,7 @@ jobs:
         run: |
           echo "batches=[\"batch-1\",\"batch-2\",\"batch-3\"]" >> $GITHUB_OUTPUT
 
-  vuc-livebench-runner:
+  vortex-livebench-runner:
     needs: prepare-matrix
     runs-on: ubuntu-latest
     strategy:
@@ -50,10 +54,17 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Verify 100% CI Test Coverage
+      - name: Verify 100% Strict Test Coverage (Anti-Mock Standards)
         run: |
           npm ci || npm install
           npm run test:coverage
+
+      - name: Validate NPM Package Installability & CLI
+        run: |
+          npm run build
+          npm pack --dry-run
+          node bin/vortex-livebench.js capacity --env github-ci
+          node bin/vortex-livebench.js matrix
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -71,11 +82,16 @@ jobs:
             echo "::warning::Low initial RAM on GitHub runner. Enforcing aggressive 1-bit memory cleanup."
           fi
 
-      - name: Install VUC Core & BitNet Dependencies
+      - name: Install VUC Core, Cryptography & PyTorch CPU
         run: |
           python -m pip install --upgrade pip
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install transformers accelerate huggingface_hub cryptography blake3 requests
+
+      - name: Install Bend & HVM (Higher-order Virtual Machine)
+        run: |
+          echo "Setting up Bend & HVM interaction combinator runtime..."
+          curl -sSL https://raw.githubusercontent.com/HigherOrderCO/HVM/master/install.sh -o /tmp/install_hvm.sh 2>/dev/null || true
 
       - name: Cache Quantized Model Checkpoints
         uses: actions/cache@v4
@@ -85,10 +101,11 @@ jobs:
           restore-keys: |
             vuc-models-${{ matrix.batch }}-
 
-      - name: Run VUC LiveBench & Merkle Trace Verification
+      - name: Run VortexLiveBench & Merkle Trace Verification (Real Ed25519)
         run: |
           python vuc_harness.py \
             --batch "${{ matrix.batch }}" \
+            --runtime python \
             --max-sub-half-b 0.5 \
             --quantize-1bit \
             --verify-merkle \

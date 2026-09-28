@@ -46,7 +46,7 @@ export interface MerkleStep {
   tokenId: number;
   logitMax: number;
   hash: string;
-  parentHash?: string;
+  parentHash: string;
 }
 
 export interface VucProofAttestation {
@@ -60,6 +60,7 @@ export interface VucProofAttestation {
     params_b: number;
     weights_sha256: string;
     tensor_merkle_root: string;
+    public_key_hex?: string;
   };
   execution: {
     prompt: string;
@@ -70,6 +71,7 @@ export interface VucProofAttestation {
     tokens_count: number;
     merkle_root: string;
     reproducibility_signature: string;
+    signature_ed25519_hex?: string;
     execution_time_ms: number;
     verification_time_ms: number;
     peak_ram_mb: number;

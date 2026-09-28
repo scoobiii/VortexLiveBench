@@ -19,16 +19,25 @@ import {
   Gauge
 } from 'lucide-react';
 import { RunnerTelemetryEngine } from '../core/runnerTelemetry';
+import { CapacityEngine } from '../core/capacityEngine';
+import { Box } from 'lucide-react';
 
 export const ArchitectureAndTelemetryDashboard: React.FC = () => {
-  const [activeSection, setActiveSection] = useState<'resources' | 'grafana' | 'repoAndCi' | 'patterns'>('resources');
+  const [activeSection, setActiveSection] = useState<'resources' | 'grafana' | 'repoAndCi' | 'patterns' | 'capacity'>('resources');
   const [copiedRules, setCopiedRules] = useState<boolean>(false);
   const [copiedClone, setCopiedClone] = useState<boolean>(false);
+  const [copiedNpm, setCopiedNpm] = useState<boolean>(false);
 
   const resourceProfiles = RunnerTelemetryEngine.getRunnerResourceProfiles();
   const alertRulesYaml = RunnerTelemetryEngine.generatePrometheusAlertRules();
   const scrapeConfigYaml = RunnerTelemetryEngine.generateGrafanaScrapeConfig();
   const specs = RunnerTelemetryEngine.getGitRepoAndExecutionSpecs();
+
+  const ghSpecs = CapacityEngine.getHardwareSpecs('github-ci');
+  const gaisSpecs = CapacityEngine.getHardwareSpecs('gais-sandbox');
+  const ghCapacity = CapacityEngine.calculateModelCapacity('github-ci');
+  const gaisCapacity = CapacityEngine.calculateModelCapacity('gais-sandbox');
+  const bendSpec = CapacityEngine.getBendHvmSpec();
 
   const handleCopyAlertRules = () => {
     navigator.clipboard.writeText(alertRulesYaml);
@@ -115,6 +124,18 @@ export const ArchitectureAndTelemetryDashboard: React.FC = () => {
           >
             <Zap className="w-3.5 h-3.5" />
             <span>4. Design Patterns de Arquitetura</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSection('capacity')}
+            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer ${
+              activeSection === 'capacity'
+                ? 'bg-purple-500 text-slate-950 font-bold'
+                : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+            }`}
+          >
+            <Box className="w-3.5 h-3.5" />
+            <span>5. Bend / HVM &amp; Capacidade (CI vs GAIS)</span>
           </button>
         </div>
       </div>
@@ -374,6 +395,208 @@ export const ArchitectureAndTelemetryDashboard: React.FC = () => {
                   </p>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SECTION 5: Bend / HVM & Capacity (CI vs GAIS) */}
+      {activeSection === 'capacity' && (
+        <div className="space-y-6">
+          {/* Comparison Cards: GitHub CI vs GAIS Sandbox */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* GitHub Actions Runner Card */}
+            <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-3 font-mono">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                <span className="text-white font-bold text-sm flex items-center gap-2">
+                  <Server className="w-4 h-4 text-cyan-400" />
+                  GitHub Actions Runner (CI)
+                </span>
+                <span className="px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 text-[10px] font-bold">
+                  ubuntu-latest
+                </span>
+              </div>
+              <div className="space-y-1.5 text-xs text-slate-300">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">RAM Total Físico:</span>
+                  <span className="text-white font-bold">{ghSpecs.totalRamMB} MB (7.168 MB)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Teto Seguro (85% Guard):</span>
+                  <span className="text-amber-400 font-bold">{ghSpecs.safeRamCeilingMB} MB</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Sistema Base + PyTorch + Bend:</span>
+                  <span className="text-slate-400">{ghSpecs.baseSystemRamMB} MB</span>
+                </div>
+                <div className="flex justify-between pt-1 border-t border-slate-800">
+                  <span className="text-cyan-400 font-bold">RAM Líquida para Modelos:</span>
+                  <span className="text-cyan-300 font-bold">{ghSpecs.netAvailableRamMB} MB</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Armazenamento SSD Scratch:</span>
+                  <span className="text-white">14.336 MB (14 GB)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">vCPUs Disponíveis:</span>
+                  <span className="text-emerald-400 font-bold">{ghSpecs.vCPUs} Cores x86_64 (AVX2/FMA)</span>
+                </div>
+              </div>
+            </div>
+
+            {/* GAIS Sandbox Container Card */}
+            <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-3 font-mono">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                <span className="text-white font-bold text-sm flex items-center gap-2">
+                  <Box className="w-4 h-4 text-purple-400" />
+                  GAIS Sandbox Container (App Runtime)
+                </span>
+                <span className="px-2 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-800 text-[10px] font-bold">
+                  Container Web
+                </span>
+              </div>
+              <div className="space-y-1.5 text-xs text-slate-300">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">RAM Alocada ao Container:</span>
+                  <span className="text-white font-bold">{gaisSpecs.totalRamMB} MB (4.000 MB)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Teto Seguro (85% Guard):</span>
+                  <span className="text-amber-400 font-bold">{gaisSpecs.safeRamCeilingMB} MB</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Node.js + Vite Server + Buffers:</span>
+                  <span className="text-slate-400">{gaisSpecs.baseSystemRamMB} MB</span>
+                </div>
+                <div className="flex justify-between pt-1 border-t border-slate-800">
+                  <span className="text-purple-400 font-bold">RAM Líquida para Modelos:</span>
+                  <span className="text-purple-300 font-bold">{gaisSpecs.netAvailableRamMB} MB</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Armazenamento Efêmero Scratch:</span>
+                  <span className="text-white">5.120 MB (5 GB)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">vCPUs Disponíveis:</span>
+                  <span className="text-emerald-400 font-bold">{gaisSpecs.vCPUs} Cores Container</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Exact Capacity Breakdown Table */}
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-5 shadow-xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800 text-xs font-mono">
+              <span className="flex items-center gap-1.5 text-white font-bold">
+                <Gauge className="w-4 h-4 text-purple-400" />
+                Quantos Binários LLM Nativos VUC Cabem em Cada Ambiente?
+              </span>
+              <span className="text-slate-400 text-[11px]">
+                Cálculo em tempo real baseado no buffer líquido de RAM
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs font-mono">
+                <thead className="bg-slate-950 text-slate-400 border-b border-slate-800 text-[11px]">
+                  <tr>
+                    <th className="py-2.5 px-3">Modelo</th>
+                    <th className="py-2.5 px-3">Quantização</th>
+                    <th className="py-2.5 px-3">RAM / Modelo</th>
+                    <th className="py-2.5 px-3 text-cyan-300">Simultâneos no Runner CI</th>
+                    <th className="py-2.5 px-3 text-purple-300">Simultâneos no GAIS Sandbox</th>
+                    <th className="py-2.5 px-3">Execução Sequencial</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/80 text-slate-300 text-[11px]">
+                  {ghCapacity.map((item, idx) => {
+                    const gaisItem = gaisCapacity[idx];
+                    return (
+                      <tr key={item.modelId} className="hover:bg-slate-800/40">
+                        <td className="py-3 px-3 font-bold text-white">{item.modelName}</td>
+                        <td className="py-3 px-3 text-slate-400">{item.quantization}</td>
+                        <td className="py-3 px-3 font-bold text-amber-300">{item.footprintPerModelMB} MB</td>
+                        <td className="py-3 px-3 font-bold text-cyan-300">
+                          {item.maxConcurrentInstances} instâncias
+                        </td>
+                        <td className="py-3 px-3 font-bold text-purple-300">
+                          {gaisItem ? `${gaisItem.maxConcurrentInstances} instâncias` : 'N/A'}
+                        </td>
+                        <td className="py-3 px-3 text-emerald-400">Ilimitado (Lotes de 5 + GC)</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Bend / HVM Interaction Net Runtime Section */}
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-5 shadow-xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800 text-xs font-mono">
+              <span className="flex items-center gap-1.5 text-white font-bold">
+                <Zap className="w-4 h-4 text-amber-400" />
+                Motor de Redução Paralela: {bendSpec.name} ({bendSpec.version})
+              </span>
+              <span className="text-slate-400 text-[11px]">
+                Overhead de Memória: {bendSpec.memoryOverheadMB} MB
+              </span>
+            </div>
+
+            <p className="text-xs text-slate-300 font-sans leading-relaxed">
+              O VUC adota o <strong>Bend</strong> sobre a <strong>HVM (Higher-order Virtual Machine)</strong> para cálculo e redução 
+              paralela determinística de árvores de interação e árvores Merkle. O Bend compila para C puro/CUDA e avalia ramificações 
+              esquerda e direita simultaneamente em todos os núcleos da CPU sem travas ou custos de sincronização de threads.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs font-mono">
+              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-1">
+                <div className="text-slate-400 text-[11px]">Instalação no Runner:</div>
+                <pre className="text-cyan-300 overflow-x-auto text-[11px]">{bendSpec.installCommand}</pre>
+              </div>
+
+              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-1">
+                <div className="text-slate-400 text-[11px]">Comando de Execução Paralela:</div>
+                <pre className="text-emerald-300 overflow-x-auto text-[11px]">{bendSpec.runCommand}</pre>
+              </div>
+            </div>
+          </div>
+
+          {/* NPM Package & CLI Usage Section */}
+          <div className="rounded-2xl border border-indigo-900/50 bg-gradient-to-r from-slate-900 via-indigo-950/20 to-slate-900 p-5 shadow-xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800 text-xs font-mono">
+              <span className="flex items-center gap-1.5 text-white font-bold">
+                <Box className="w-4 h-4 text-indigo-400" />
+                Pacote NPM Instalável: vortex-livebench v1.0.0
+              </span>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText('npm install -g vortex-livebench\nvortex-livebench capacity');
+                  setCopiedNpm(true);
+                  setTimeout(() => setCopiedNpm(false), 2000);
+                }}
+                className="flex items-center gap-1 text-cyan-400 hover:text-cyan-300 text-xs font-mono cursor-pointer"
+              >
+                {copiedNpm ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedNpm ? 'Copiado!' : 'Copiar Comandos'}</span>
+              </button>
+            </div>
+
+            <div className="space-y-2 text-xs font-mono">
+              <div className="text-slate-300">
+                O projeto agora é um pacote NPM instalável completo com CLI global e biblioteca TypeScript:
+              </div>
+
+              <pre className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-cyan-300 overflow-x-auto text-[11px]">
+# Execução direta via npx sem instalar:
+npx vortex-livebench capacity --env github-ci
+npx vortex-livebench verify proof.vuc.json
+npx vortex-livebench matrix
+
+# Ou instalação global via npm:
+npm install -g vortex-livebench
+vortex-livebench --help
+              </pre>
             </div>
           </div>
         </div>
