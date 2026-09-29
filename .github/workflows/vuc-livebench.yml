@@ -48,11 +48,10 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Node.js 20 & Run 100% Coverage Test Suite
+      - name: Set up Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: '22'
 
       - name: Verify 100% Strict Test Coverage (Anti-Mock Standards)
         run: |
